@@ -57,12 +57,12 @@ loss_magnitude_likely <- 4000
 
 ## Run the calculations
 
-We do a monte carlo simulation using the beta-PERT distribution. Defaulting to 7000 runs. Confidence level of 4 is the default in beta-PERT, we can vary this value to change the shape of the distribution to reflect lower or higher certainty around the most likely value.
-
 ```{r}
 confidence <- 4 # default in PERT
 number_of_runs <- 7000
 ```
+
+We do a [monte carlo simulation using the beta-PERT distribution](https://www.rdocumentation.org/packages/mc2d/versions/0.1-17/topics/pert). Defaulting to `r scales::comma(number_of_runs)` runs. Confidence level of 4 is the default in beta-PERT, we can vary this value to change the shape of the distribution to reflect lower or higher certainty around the most likely value.
 
 Run the simulation for the Loss Event Frequency
 ```{r}
@@ -78,6 +78,8 @@ Multiply Loss Event Frequency x Loss Magnitude
 ```{r}
 annual_loss_exposure <- LEF * LM
 ```
+
+## Histogram visualization 
 
 Plot the results to show annual loss exposure. This can be plotted as a histogram or a loss exceedance curve with linear or exponential scales.
 ```{r warning=FALSE}
@@ -116,7 +118,6 @@ lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='firebrick', lwd=2, axes=F)
 ticks <- c(0,10,20,30,40,50,60,70,80,90,100)
 axis(4, at=seq(from = 0, to = max(h$counts), length.out = 11), labels=seq(0, 100, 10), col = 'firebrick', col.axis = 'firebrick', las = 1)
 mtext(side = 4, line = 2, "Cumulative Frequency", col = 'firebrick')
-box()
 ```
 
 ## Alternative visualization
@@ -145,5 +146,7 @@ gg2
 ## Loss Exceedance curve
 
 TODO graph the [loss exceedance curve](https://www.cyentia.com/2017/12/11/communicating-risk-loss-exceedance-curves/), example ggplot code at https://github.com/davidski/evaluator/blob/master/inst/rmd/analyze_risk.Rmd#loss-exceedance-curve
+
+## Notes
 
 It's important to note that this is not a prediction, but a calculation of probabilities. Even if something is only 1% probable, it could still happen. It's also important to note all the assumptions made in the risk scenario being analyzed and in the estimates used as inputs to the model.
