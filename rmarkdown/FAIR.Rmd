@@ -1,0 +1,149 @@
+---
+title: "Example FAIR analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+ ```{r setup, include=FALSE, cache=FALSE}
+library(mc2d)
+library(ggplot2)
+library(scales)
+library(plyr)
+library(hexbin)
+```
+
+This is an example of a risk analysis using the FAIR model implemented in an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+
+## Estimates from Subject Matter Experts
+
+Estimates should be [calibrated](https://en.wikipedia.org/wiki/Calibrated_probability_assessment). There are [good courses available](https://www.hubbardresearch.com/shop/calibration-facilitator-training/) on calibrating your subject matter experts. 
+
+Estimates are all provides as a range of min, max, and most likely. For advanced analysis, you can also [tweak the confidence factor](https://www.vosesoftware.com/riskwiki/ModifiedPERTdistribution.php) to adjust the shape of the distribution.
+
+## Set up inputs for Loss Event Frequency
+
+If loss event freqency cannot be estimated, then go a level deeper in the FAIR model and derive loss event frequency from Threat Event Frequency and Vulnerability (susceptibility). For the purpose of this example we will estimate Loss Event Frequency directly.
+
+We are estimating that this loss occurs at least twice a year, is most likely to happen 4 times a year (once per quarter), and at most would occur 9 times per year.
+```{r}
+loss_event_frequency_min <- 2
+loss_event_frequency_max <- 9
+loss_event_frequency_likely <- 4
+```
+
+## Set up inputs for Loss Magnitude
+
+Losses in FAIR are divided into primary losses and secondary losses. Another term for this is guaranteed losses and conditional losses. Primary losses are typically where we put losses incurred directly by the organization, Secondary losses are typically where we put losses that are caused by actions that secondary stakeholders might take. If a secondary loss always occurs, there is no math reason for categorizing as a secondary loss.
+
+Losses in FAIR are divided into 6 forms, to help structure the discussion with your subject matter experts. All the forms of loss get added together, but dividing them in this way helps organize the calculations.
+
+The 6 forms of loss in FAIR are
+
+ * Productivity Loss - lost sales, idle employees
+ * Response costs - hiring lawyers, forensic investigations, generators
+ * Replacement costs
+ * Competitive Advantage
+ * Fines/Judgements
+ * Reputation Damage - examples are uncaptured revenue, increased cost of capital 
+
+In this example we will not calculate each form of loss separately, but assume that we have considered each of those forms and come up with a range estimate of loss magnitude.
+
+```{r}
+loss_magnitude_min <- 1000
+loss_magnitude_max <- 9000
+loss_magnitude_likely <- 4000
+```
+
+## Run the calculations
+
+We do a monte carlo simulation using the beta-PERT distribution. Defaulting to 7000 runs. Confidence level of 4 is the default in beta-PERT, we can vary this value to change the shape of the distribution to reflect lower or higher certainty around the most likely value.
+
+```{r}
+confidence <- 4 # default in PERT
+number_of_runs <- 7000
+```
+
+Run the simulation for the Loss Event Frequency
+```{r}
+LEF <- rpert(number_of_runs, loss_event_frequency_min, loss_event_frequency_likely, loss_event_frequency_max, shape = confidence)
+```
+
+Run the simulation for the Loss Magnitude
+```{r}
+LM <- rpert(number_of_runs, loss_magnitude_min, loss_magnitude_likely, loss_magnitude_max, shape = confidence)
+```
+
+Multiply Loss Event Frequency x Loss Magnitude
+```{r}
+annual_loss_exposure <- LEF * LM
+```
+
+Plot the results to show annual loss exposure. This can be plotted as a histogram or a loss exceedance curve with linear or exponential scales.
+```{r warning=FALSE}
+# Thanks to https://github.com/zugo01/FAIRTool
+# for examples of graphing these results
+ninety <- quantile(annual_loss_exposure, probs=(0.9))
+maximum <- quantile(annual_loss_exposure, probs = (1))
+ten <- quantile(annual_loss_exposure, probs = (0.1))
+average <- mean(annual_loss_exposure)
+minimum <- quantile(annual_loss_exposure, probs = (0))
+#LossPercentile <- quantile(annual_loss_exposure, probs=(DataLossScale$LP/100))
+h <- hist(annual_loss_exposure, breaks=100, col="steelblue", main="Annualised Risk Exposure", xlab="Loss", axes = FALSE, ylab="Simulation Distribution", panel.first=grid(NULL,NULL,lty=1))
+par(new = T)
+
+ec <- ecdf(annual_loss_exposure)
+axis(1, at=axTicks(1), labels=sprintf("$%s", axTicks(1)))
+      
+#abline(v = LossPercentile, col ="red", lwd = 3, lty = 2)
+abline(v = ninety, col ="black", lwd = 3, lty = 2)
+text(ninety, max(h$counts)-2, "90th", col = "black", pos = 4, srt = 45)
+      
+abline(v = maximum, col ="black", lwd = 3, lty = 2)
+text(maximum, max(h$counts)-2, "Max", col = "black", pos = 4, srt = 45)
+      
+abline(v = average, col ="black", lwd = 3, lty = 2)
+text(average, max(h$counts)-2, "Avg", col = "black", pos = 4, srt = 45)
+      
+abline(v = ten, col ="black", lwd = 3, lty = 2)
+text(ten, max(h$counts)-2, "10th", col = "black", pos = 4, srt = 45)
+      
+abline(v = minimum, col ="black", lwd = 3, lty = 2)
+text(minimum, max(h$counts)-2, "Min", col = "black", pos = 4, srt = 45)
+      
+      
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='firebrick', lwd=2, axes=F)
+ticks <- c(0,10,20,30,40,50,60,70,80,90,100)
+axis(4, at=seq(from = 0, to = max(h$counts), length.out = 11), labels=seq(0, 100, 10), col = 'firebrick', col.axis = 'firebrick', las = 1)
+mtext(side = 4, line = 2, "Cumulative Frequency", col = 'firebrick')
+box()
+```
+
+## Alternative visualization
+
+Another visualization using ggplot
+
+```{r}
+ale <- data.frame(
+      PLEF = LEF,
+      PLMS = LM
+      )
+
+gg2 <- ggplot(ale, aes(x = PLEF))
+gg2 <- gg2 + ggtitle("Risk")
+gg2 <- gg2 + ylab("Loss Magnitude")
+gg2 <- gg2 + xlab("Loss Event Frequency (Loss Events/year)")
+gg2 <- gg2 + geom_point(aes(x = PLEF, y = PLMS, colour="Primary"), na.rm=TRUE, position = "jitter", color = "steelblue")
+#gg2 <- gg2 + scale_x_log10(limits = c(0.01, 10000), labels = comma)
+#gg2 <- gg2 + coord_cartesian(xlim=c(1,10E3))
+#gg2 <- gg2 + scale_y_log10(labels = comma)
+#gg2 <- gg2 + coord_cartesian(ylim=c(1,10E7))
+gg2 <- gg2 + theme_bw()
+gg2
+```
+
+## Loss Exceedance curve
+
+TODO graph the [loss exceedance curve](https://www.cyentia.com/2017/12/11/communicating-risk-loss-exceedance-curves/), example ggplot code at https://github.com/davidski/evaluator/blob/master/inst/rmd/analyze_risk.Rmd#loss-exceedance-curve
+
+It's important to note that this is not a prediction, but a calculation of probabilities. Even if something is only 1% probable, it could still happen. It's also important to note all the assumptions made in the risk scenario being analyzed and in the estimates used as inputs to the model.
