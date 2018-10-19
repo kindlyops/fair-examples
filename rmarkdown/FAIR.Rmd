@@ -19,7 +19,7 @@ This is an example of a risk analysis using the FAIR model implemented in an [R 
 
 Estimates should be [calibrated](https://en.wikipedia.org/wiki/Calibrated_probability_assessment). There are [good courses available](https://www.hubbardresearch.com/shop/calibration-facilitator-training/) on calibrating your subject matter experts. 
 
-Estimates are all provides as a range of min, max, and most likely. For advanced analysis, you can also [tweak the confidence factor](https://www.vosesoftware.com/riskwiki/ModifiedPERTdistribution.php) to adjust the shape of the distribution.
+Estimates are all provided as a range of min, max, and most likely. For advanced analysis, you can also [tweak the confidence factor](https://www.vosesoftware.com/riskwiki/ModifiedPERTdistribution.php) to adjust the shape of the distribution.
 
 ## Set up inputs for Loss Event Frequency
 
@@ -59,10 +59,18 @@ loss_magnitude_likely <- 4000
 
 ```{r}
 confidence <- 4 # default in PERT
-number_of_runs <- 7000
+number_of_runs <- 10000
 ```
 
 We do a [monte carlo simulation using the beta-PERT distribution](https://www.rdocumentation.org/packages/mc2d/versions/0.1-17/topics/pert). Defaulting to `r scales::comma(number_of_runs)` runs. Confidence level of 4 is the default in beta-PERT, we can vary this value to change the shape of the distribution to reflect lower or higher certainty around the most likely value.
+
+For a nice explanation of how this code works in R, see this explanation
+[of betaPERT by Jay Jacobs](http://datadrivensecurity.info/blog/posts/2014/Jan/severski/)
+
+Set a seed for repeatable results in this notebook
+```{r}
+set.seed(88881111)
+```
 
 Run the simulation for the Loss Event Frequency
 ```{r}
@@ -74,78 +82,57 @@ Run the simulation for the Loss Magnitude
 LM <- rpert(number_of_runs, loss_magnitude_min, loss_magnitude_likely, loss_magnitude_max, shape = confidence)
 ```
 
-Multiply Loss Event Frequency x Loss Magnitude
+Multiply Loss Event Frequency x Loss Magnitude. Note that in R this
+is doing vector multiplication.
 ```{r}
 annual_loss_exposure <- LEF * LM
+crude_ALE <- annual_loss_exposure
 ```
+
+Simple vector multiplication as implied by the FAIR model assumes that multiple losses in a single year are the same size,
+for a better approach described at [Severski](https://gist.github.com/davidski/8490758#gistcomment-2387996)
+we can take each set of loss events in a year and sample from the
+distribution of loss magnitudes, then sum.
+```{r}
+ALE <- sapply(LEF, function(e) sum(rpert(e, loss_magnitude_min, loss_magnitude_likely, loss_magnitude_max, shape = confidence)))
+```
+
+Take the 95th percentile.
+Value at Risk is `r dollar(quantile(ALE, c(0.95)))`.
+Maximum Loss is `r dollar(max(ALE))`.
+Mean Loss is `r dollar(mean(ALE))`.
+Minimum Loss is `r dollar(min(ALE))`.
 
 ## Histogram visualization 
 
 Plot the results to show annual loss exposure. This can be plotted as a histogram or a loss exceedance curve with linear or exponential scales.
-```{r warning=FALSE}
-# Thanks to https://github.com/zugo01/FAIRTool
-# for examples of graphing these results
-ninety <- quantile(annual_loss_exposure, probs=(0.9))
-maximum <- quantile(annual_loss_exposure, probs = (1))
-ten <- quantile(annual_loss_exposure, probs = (0.1))
-average <- mean(annual_loss_exposure)
-minimum <- quantile(annual_loss_exposure, probs = (0))
-#LossPercentile <- quantile(annual_loss_exposure, probs=(DataLossScale$LP/100))
-h <- hist(annual_loss_exposure, breaks=100, col="steelblue", main="Annualised Risk Exposure", xlab="Loss", axes = FALSE, ylab="Simulation Distribution", panel.first=grid(NULL,NULL,lty=1))
-par(new = T)
-
-ec <- ecdf(annual_loss_exposure)
-axis(1, at=axTicks(1), labels=sprintf("$%s", axTicks(1)))
-      
-#abline(v = LossPercentile, col ="red", lwd = 3, lty = 2)
-abline(v = ninety, col ="black", lwd = 3, lty = 2)
-text(ninety, max(h$counts)-2, "90th", col = "black", pos = 4, srt = 45)
-      
-abline(v = maximum, col ="black", lwd = 3, lty = 2)
-text(maximum, max(h$counts)-2, "Max", col = "black", pos = 4, srt = 45)
-      
-abline(v = average, col ="black", lwd = 3, lty = 2)
-text(average, max(h$counts)-2, "Avg", col = "black", pos = 4, srt = 45)
-      
-abline(v = ten, col ="black", lwd = 3, lty = 2)
-text(ten, max(h$counts)-2, "10th", col = "black", pos = 4, srt = 45)
-      
-abline(v = minimum, col ="black", lwd = 3, lty = 2)
-text(minimum, max(h$counts)-2, "Min", col = "black", pos = 4, srt = 45)
-      
-      
-lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='firebrick', lwd=2, axes=F)
-ticks <- c(0,10,20,30,40,50,60,70,80,90,100)
-axis(4, at=seq(from = 0, to = max(h$counts), length.out = 11), labels=seq(0, 100, 10), col = 'firebrick', col.axis = 'firebrick', las = 1)
-mtext(side = 4, line = 2, "Cumulative Frequency", col = 'firebrick')
-```
-
-## Alternative visualization
-
-Another visualization using ggplot
 
 ```{r}
-ale <- data.frame(
-      PLEF = LEF,
-      PLMS = LM
-      )
-
-gg2 <- ggplot(ale, aes(x = PLEF))
-gg2 <- gg2 + ggtitle("Risk")
-gg2 <- gg2 + ylab("Loss Magnitude")
-gg2 <- gg2 + xlab("Loss Event Frequency (Loss Events/year)")
-gg2 <- gg2 + geom_point(aes(x = PLEF, y = PLMS, colour="Primary"), na.rm=TRUE, position = "jitter", color = "steelblue")
-#gg2 <- gg2 + scale_x_log10(limits = c(0.01, 10000), labels = comma)
-#gg2 <- gg2 + coord_cartesian(xlim=c(1,10E3))
-#gg2 <- gg2 + scale_y_log10(labels = comma)
-#gg2 <- gg2 + coord_cartesian(ylim=c(1,10E7))
-gg2 <- gg2 + theme_bw()
-gg2
+gg <- ggplot(data.frame(ALE), 
+             aes(x = ALE))
+gg <- gg + geom_histogram(aes(y = ..density..),
+                          color="black", 
+                          fill = "white", 
+                          binwidth = 1000)
+gg <- gg + geom_density(fill = "steelblue", alpha = 1/3)
+gg <- gg + theme_bw()
+gg
 ```
+
+---
+# # Alternative visualization
+# # Look at https://github.com/zugo01/FAIRTool
+# # for alternative examples of graphing these results
+---
 
 ## Loss Exceedance curve
 
 TODO graph the [loss exceedance curve](https://www.cyentia.com/2017/12/11/communicating-risk-loss-exceedance-curves/), example ggplot code at https://github.com/davidski/evaluator/blob/master/inst/rmd/analyze_risk.Rmd#loss-exceedance-curve
+
+```{r}
+gg <- ggplot(., aes(prob, max_loss))
+gg <- gg + geom_path()
+```
 
 ## Notes
 
