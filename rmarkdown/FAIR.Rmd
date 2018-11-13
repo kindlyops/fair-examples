@@ -1,6 +1,8 @@
 ---
 title: "Example FAIR analysis"
 output:
+  github_document:
+    toc: true
   prettydoc::html_pretty:
     df_print: paged
     toc: true
@@ -125,7 +127,7 @@ Minimum Loss is `r dollar(min_loss)`.
 
 Plot the results to show annual loss exposure. This can be plotted as a histogram or a loss exceedance curve with linear or exponential scales.
 
-```{r}
+```{r fair_histogram}
 ale_frame <- data.frame(ALE)
 most <- max(ALE)
 
@@ -149,7 +151,7 @@ gg
 
 Lets look at the [loss exceedance curve](https://www.cyentia.com/communicating-risk-loss-exceedance-curves/) for these results.
 
-```{r}
+```{r fair_loss_exceedance}
 # calculate the probability of exceedance aka complementary cumulative probability function
 ale_frame <- mutate(ale_frame, prob = 1 - percent_rank(ALE))
 # sort the results in ascending order of loss magnitude
